@@ -1,7 +1,14 @@
-Select-String -Path $log.FullName -Pattern "error|fail|warn|401|403|404|helper|provider|endpoint|managed" |
-  Where-Object Line -notmatch "data:image" | Select-Object -Last 30
+$env:NODE_EXTRA_CA_CERTS                                       # shows the PEM path
+$env:OTEL_EXPORTER_OTLP_CERTIFICATE = $env:NODE_EXTRA_CA_CERTS # same CA for the OTLP exporter
+
+
+$h = & "C:\Program Files\nodejs\node.exe" "C:\src\npm-global\node_modules\@schroders\claude-code\bin\schroders-claude.js" otel-headers | ConvertFrom-Json
+$ep = "https://prd.int.api.schroders.com/anthropic/claude-code/telemetry"
+curl.exe -s -o NUL -w "metrics -> %{http_code}`n" -X POST "$ep/v1/metrics" -H "Authorization: $($h.Authorization)" -H "Content-Type: application/json" -d '{\"resourceMetrics\":[]}'
+curl.exe -s -o NUL -w "traces  -> %{http_code}`n" -X POST "$ep/v1/traces"  -H "Authorization: $($h.Authorization)" -H "Content-Type: application/json" -d '{\"resourceSpans\":[]}'
+curl.exe -s -o NUL -w "no auth -> %{http_code}`n" -X POST "$ep/v1/metrics" -H "Content-Type: application/json" -d '{}'
 
 
 
-
-Get-ChildItem "C:\ProgramData" -Recurse -Filter "managed-settings.json" -ErrorAction SilentlyContinue | Select-Object FullName
+$log = Get-ChildItem "$env:USERPROFILE\.copilot\logs" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+Select-String -Path $log.FullName -Pattern "export|otlp|tls|certificate|status" | Where-Object Line -notmatch "data:image" | Select-Object -Last 20
