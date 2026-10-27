@@ -1,0 +1,5 @@
+Remove-Item Env:COPILOT_OTEL_CAPTURE_IDENTITY -ErrorAction SilentlyContinue
+$upn = (whoami /upn) 2>$null; if (-not $upn) { $upn = $env:USERNAME }
+$upn                                                     # check it prints your company login
+$env:OTEL_RESOURCE_ATTRIBUTES = "user.email=$upn,user.name=$env:USERNAME"
+copilot -p "list the files in this folder"
