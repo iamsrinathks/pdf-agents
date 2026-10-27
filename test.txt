@@ -1,0 +1,7 @@
+Select-String -Path $log.FullName -Pattern "error|fail|warn|401|403|404|helper|provider|endpoint|managed" |
+  Where-Object Line -notmatch "data:image" | Select-Object -Last 30
+
+
+
+
+Get-ChildItem "C:\ProgramData" -Recurse -Filter "managed-settings.json" -ErrorAction SilentlyContinue | Select-Object FullName
