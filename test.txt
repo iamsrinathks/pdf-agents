@@ -1,0 +1,51 @@
+The CLI is telling you **exactly what's allowed**. In **user settings**, only **`telemetry.headersProvider`** is supported. Endpoint, protocol, service name and "enabled" are **enterprise-managed-only** keys, so on your machine they come from **environment variables**.
+
+**What the official reference says** (`copilot help monitoring`, CLI 1.0.100)
+- *"Configure **telemetry.headersProvider in user settings** or enterprise-managed telemetry policy to run a shell-free command that supplies fresh OTLP headers."*
+- **Endpoint and protocol are environment variables:** `OTEL_EXPORTER_OTLP_ENDPOINT` (*"Setting this auto-enables OTel"*), `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_SERVICE_NAME`.
+- Your **Problems tab confirms it**: `telemetry.enabled / endpoint / protocol / serviceName: Unsupported local telemetry setting`.
+- **Important:** an invalid value makes the **whole `telemetry` block have no effect**, including your `headersProvider`. So nothing would be sent with the token until this is fixed.
+
+**Step 1: Keep only `headersProvider` in `settings.json`**
+```powershell
+$f = "$env:USERPROFILE\.copilot\settings.json"
+$cfg = Get-Content $f -Raw | ConvertFrom-Json
+$cfg.telemetry = [ordered]@{
+  headersProvider = [ordered]@{
+    path = "C:\Program Files\nodejs\node.exe"
+    args = @("C:\src\npm-global\node_modules\@\claude-code\bin\-claude.js", "otel-headers")
+    refreshIntervalMs = 1080000
+  }
+}
+$cfg | ConvertTo-Json -Depth 10 | Set-Content $f -Encoding UTF8
+$cfg.telemetry | ConvertTo-Json -Depth 5
+```
+- This also removes `captureContent`. It **defaults to off**, which is what  wants for now.
+
+**Step 2: Set the endpoint through environment variables (current window only, easy to undo)**
+```powershell
+$env:OTEL_EXPORTER_OTLP_ENDPOINT = "https://prd.int.api.com/anthropic/claude-code/telemetry"
+$env:OTEL_EXPORTER_OTLP_PROTOCOL = "http/json"
+$env:OTEL_SERVICE_NAME           = "copilot-cli"
+Get-ChildItem Env: | Where-Object Name -match "OTEL|COPILOT_OTEL"
+```
+- **Check that `COPILOT_OTEL_FILE_EXPORTER_PATH` is gone** from that list. If it's still there, Copilot will write to the local file instead.
+- **Don't set** `OTEL_EXPORTER_OTLP_HEADERS`. The helper provides the header.
+- **Run `copilot` from this same window**, so it picks up the variables.
+
+**Step 3: Re-check, then run**
+- Start **`copilot`**, then run **`/settings` → Problems**. It should show **0 problems**.
+- **Folder trust prompt:** choose **"1. Yes"** (this session only). That's fine for the test. Ideally start Copilot from a project folder rather than your home folder.
+- Run **2–3 prompts with tools**, wait about 2 minutes, `/exit`. **Note the time.**
+
+**Step 4: Check the CLI log**
+```powershell
+$log = Get-ChildItem "$env:USERPROFILE\.copilot\logs" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+Select-String -Path $log.FullName -Pattern "opentelemetry|otel|header|export" | Select-Object -Last 20
+```
+- **Good:** `exporter=otlp-http` and **no helper errors**. A **404 on traces** is expected.
+- **Then message ** with the time, so he can check for 200s under your identity.
+
+**For the enterprise rollout later**
+- **Per user (like this test):** environment variables for endpoint and protocol, and `headersProvider` in user `settings.json`. Both can be **pushed by Intune**.
+- **Centrally (better):** put **all of it** (endpoint, protocol, serviceName and `headersProvider`) in the **enterprise-managed `telemetry` policy**. A managed helper **overrides** users, and devs can't change it.
